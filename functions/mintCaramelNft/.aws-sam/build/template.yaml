@@ -1,0 +1,35 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: mintCaramelNft
+Transform:
+- AWS::Serverless-2016-10-31
+Parameters:
+  InfuraKey:
+    Type: String
+Resources:
+  mintCaramelNftFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/mintCaramelNft.mintCaramelNftHandler
+      Runtime: nodejs14.x
+      MemorySize: 128
+      Timeout: 100
+      Description: A function that receives NFT data and mints an NFT.
+      Policies:
+      - S3CrudPolicy:
+          BucketName: caramel-nfts
+      Environment:
+        Variables:
+          INFURA_KEY:
+            Ref: InfuraKey
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /
+            Method: GET
+      CodeUri: mintCaramelNftFunction
+Outputs:
+  WebEndpoint:
+    Description: API Gateway endpoint URL for Prod stage
+    Value:
+      Fn::Sub: https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/
