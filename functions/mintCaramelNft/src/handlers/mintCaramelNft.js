@@ -1,6 +1,6 @@
 // Create clients and set shared const values outside of the handler.
 
-//fix authentication for lambda
+//fix authentication for lambda DONE
 //deploy contract to polygon
 //put contract ABI in s3 bucket
 //add permissions to lambda to read secret from secrets manager
@@ -17,14 +17,14 @@ const networks = {
 };
 var networkId = process.env.NETWORK_ID
 let web3 = new Web3(new Web3.providers.HttpProvider(networks[networkId] + infuraProjectId));
-const deployedNetwork = Asset.networks[networkId];
-console.info(`deployed contract address: ${deployedNetwork.address}`);
+// const deployedNetwork = Asset.networks[networkId];
+// console.info(`deployed contract address: ${deployedNetwork.address}`);
 
 const publicKey = process.env.PUBLIC_KEY;
 const privateKeySecretName = process.env.PRIVATE_KEY_SECRET_NAME
 
 const GASSTATION_API_URL = 'https://gasstation-mainnet.matic.network';
-const fetch = require("node-fetch");
+import fetch from 'node-fetch';
 const gasPriceSelection = 'fastest';
 
 /**
@@ -46,8 +46,8 @@ exports.mintCaramelNftHandler = async (event) => {
     
     //get private key from secrets manager
 
-    const nftFactoryInstance = new web3.eth.Contract(Asset.abi, deployedNetwork && deployedNetwork.address);
-    let account = web3.eth.accounts.privateKeyToAccount(privateKey);
+    // const nftFactoryInstance = new web3.eth.Contract(Asset.abi, deployedNetwork && deployedNetwork.address);
+    // let account = web3.eth.accounts.privateKeyToAccount(privateKey);
 
     let gasPrice = 15;
     let blockTime;
@@ -60,23 +60,23 @@ exports.mintCaramelNftHandler = async (event) => {
     console.info(`Gas price for ${gasPriceSelection} transaction is ${gasPrice}`);
     console.info(`Expected duration of the transaction is ${blockTime} seconds`);
 
-    var encoded = await nftFactoryInstance.methods.mint(buyer, uri).encodeABI();
-    var tx = {
-        from: publicKey,
-        to : deployedNetwork.address,
-        data : encoded,
-        gas: await web3.eth.estimateGas({
-            from: publicKey,
-            to: deployedNetwork.address,
-            data: encoded
-        }),
-        nonce: await web3.eth.getTransactionCount(publicKey, 'pending'),
-        maxFeePerGas: web3.utils.toWei("" + gasPrice, 'gwei')
-    }
-    let signed = await web3.eth.accounts.signTransaction(tx, account.privateKey);
-    const data = await sendTransaction(signed.rawTransaction)
-    const tokenId = getTokenId(data);
-    console.info('got token id ', tokenId);
+    // var encoded = await nftFactoryInstance.methods.mint(buyer, uri).encodeABI();
+    // var tx = {
+    //     from: publicKey,
+    //     to : deployedNetwork.address,
+    //     data : encoded,
+    //     gas: await web3.eth.estimateGas({
+    //         from: publicKey,
+    //         to: deployedNetwork.address,
+    //         data: encoded
+    //     }),
+    //     nonce: await web3.eth.getTransactionCount(publicKey, 'pending'),
+    //     maxFeePerGas: web3.utils.toWei("" + gasPrice, 'gwei')
+    // }
+    // let signed = await web3.eth.accounts.signTransaction(tx, account.privateKey);
+    // const data = await sendTransaction(signed.rawTransaction)
+    // const tokenId = getTokenId(data);
+    // console.info('got token id ', tokenId);
 
     //update token id in json in s3
 

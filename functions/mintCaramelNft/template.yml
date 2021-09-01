@@ -15,6 +15,12 @@ Transform:
 Parameters:
   InfuraKey:
     Type: String
+  PublicKey:
+    Type: String
+  PrivateKeySecretName:
+    Type: String
+  ApiKeyValue:
+    Type: String
 
 # Resources declares the AWS resources that you want to include in the stack
 # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/resources-section-structure.html
@@ -29,7 +35,7 @@ Resources:
       Handler: src/handlers/mintCaramelNft.mintCaramelNftHandler
       Runtime: nodejs14.x
       MemorySize: 128
-      Timeout: 3600
+      Timeout: 900
       Description: A function that receives NFT data and mints an NFT.
       Policies:
         # Give Create/Read/Update/Delete Permissions to the SampleTable
@@ -39,6 +45,8 @@ Resources:
         Variables:
           # Make table name accessible as environment variable from function code during execution
           INFURA_KEY: !Ref InfuraKey
+          PUBLIC_KEY: !Ref PublicKey
+          PRIVATE_KEY_SECRET_NAME: !Ref PrivateKeySecretName
       Events:
         ApiKey:
           Type: Api
@@ -55,10 +63,44 @@ Resources:
       StageName: Prod
       Auth:
         ApiKeyRequired: true # sets for all methods
+
+  ApiKey: 
+    Type: AWS::ApiGateway::ApiKey
+    Properties: 
+      Name: !Join ["", [{"Ref": "AWS::StackName"}, "-apikey"]]
+      Description: "CloudFormation API Key V1"
+      Enabled: true
+      GenerateDistinctId: false
+      Value: !Ref ApiKeyValue
+      StageKeys:
+        - RestApiId: !Ref MintCaramelNftApi
+          StageName: Prod
+
+  ApiUsagePlan:
+    Type: "AWS::ApiGateway::UsagePlan"
+    Properties:
+      ApiStages: 
+        - ApiId: !Ref MintCaramelNftApi
+          Stage: Prod     
+      Description: !Join [" ", [{"Ref": "AWS::StackName"}, "usage plan"]]
+      Quota:
+        Limit: 1000
+        Period: MONTH
+      UsagePlanName: !Join ["", [{"Ref": "AWS::StackName"}, "-usage-plan"]]
+
+  ApiUsagePlanKey:
+    Type: "AWS::ApiGateway::UsagePlanKey"
+    DependsOn: 
+      - MintCaramelNftApi
+    Properties:
+      KeyId: !Ref ApiKey
+      KeyType: API_KEY
+      UsagePlanId: !Ref ApiUsagePlan
+
   # Each Lambda function is defined by properties:
   # https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
 
 Outputs:
   WebEndpoint:
     Description: "API Gateway endpoint URL for Prod stage"
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+    Value: !Sub "https://${MintCaramelNftApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
