@@ -48,11 +48,12 @@ exports.mintCaramelNftHandler = async (event) => {
     console.info('buyer is ', buyer)
 
     const personName = body.name;
+    const shortName = body.shortName;
     const personAlias = body.alias;
     const imageUrl = body.imageUrl;
     
     const json = buildJson(personName, personAlias, imageUrl);
-    const jsonPath = 'jsons/' + personName + '.json';
+    const jsonPath = 'jsons/' + shortName + '.json';
     const jsonUri = await uploadToS3(jsonPath, json);
     console.info('jsonUri is ', jsonUri);
     
@@ -60,30 +61,30 @@ exports.mintCaramelNftHandler = async (event) => {
     const privateKey = secret.SecretString;
 
     const contractAbi = await getContractAbi();
-
+    console.log(contractAbi);
     const nftFactoryInstance = new web3.eth.Contract(contractAbi, contractAddress);
     let account = web3.eth.accounts.privateKeyToAccount(privateKey);
 
     let gasPrice = await getGasPrice();
     console.info('gasPrice is ', gasPrice);
 
-    var encoded = await nftFactoryInstance.methods.mint(buyer, uri).encodeABI();
+    var encoded = await nftFactoryInstance.methods.mintNFT(buyer, jsonUri).encodeABI();
     var tx = {
         from: publicKey,
-        to : deployedNetwork.address,
+        to : contractAddress,
         data : encoded,
         gas: await web3.eth.estimateGas({
             from: publicKey,
-            to: deployedNetwork.address,
+            to: contractAddress,
             data: encoded
         }),
         nonce: await web3.eth.getTransactionCount(publicKey, 'pending'),
         maxFeePerGas: web3.utils.toWei("" + gasPrice, 'gwei')
     }
-    // let signed = await web3.eth.accounts.signTransaction(tx, account.privateKey);
-    // const data = await sendTransaction(signed.rawTransaction)
-    // const tokenId = getTokenId(data);
-    // console.info('got token id ', tokenId);
+    let signed = await web3.eth.accounts.signTransaction(tx, account.privateKey);
+    const data = await sendTransaction(signed.rawTransaction)
+    const tokenId = getTokenId(data);
+    console.info('got token id ', tokenId);
 
     //update token id in json in s3
 
@@ -148,6 +149,7 @@ async function getGasPrice() {
         });
     console.info(`Gas price for ${gasPriceSelection} transaction is ${gasPrice}`);
     console.info(`Expected duration of the transaction is ${blockTime} seconds`);
+    return gasPrice;
 }
 
 function buildJson(personName, personAlias, imageUrl) {
