@@ -51,8 +51,9 @@ exports.mintCaramelNftHandler = async (event) => {
     const shortName = body.shortName;
     const personAlias = body.alias;
     const imageUrl = body.imageUrl;
+    const linkedinprofile = body.linkedIn
     
-    const json = buildJson(personName, personAlias, imageUrl);
+    const json = buildJson(personName, personAlias, imageUrl, linkedinprofile);
     const jsonPath = 'jsons/' + shortName + '.json';
     const jsonUri = await uploadToS3(jsonPath, json);
     console.info('jsonUri is ', jsonUri);
@@ -79,7 +80,8 @@ exports.mintCaramelNftHandler = async (event) => {
             data: encoded
         }),
         nonce: await web3.eth.getTransactionCount(publicKey, 'pending'),
-        maxFeePerGas: web3.utils.toWei("" + gasPrice, 'gwei')
+        // maxFeePerGas: web3.utils.toWei("" + gasPrice, 'gwei')
+        gasPrice: web3.utils.toWei("" + gasPrice, 'gwei')
     }
     let signed = await web3.eth.accounts.signTransaction(tx, account.privateKey);
     const data = await sendTransaction(signed.rawTransaction)
@@ -87,10 +89,10 @@ exports.mintCaramelNftHandler = async (event) => {
     console.info('got token id ', tokenId);
 
     //update token id in json in s3
-
+    const responseBody = '{ "tokenId":' + tokenId + '}';
     const response = {
         statusCode: 200,
-        body: JSON.stringify(infuraProjectId)
+        body: responseBody
     };
 
     console.info(`response from: ${event.path} statusCode: ${response.statusCode} body: ${response.body}`);
@@ -110,7 +112,7 @@ async function uploadToS3(path, json) {
     return jsonUri;
 }
 
-function sendTransaction(transaction) {
+async function sendTransaction(transaction) {
     return new Promise((resolve, reject) => {
         web3.eth.sendSignedTransaction(transaction)
         .once('transactionHash', (hash) => { console.info('transaction hash is ', hash) })
@@ -123,6 +125,7 @@ function sendTransaction(transaction) {
 }
 
 function getTokenId(data) {
+    console.info(data)
     let inputs = [{
       type: 'uint256',
       name: 'tokenId',
@@ -134,6 +137,7 @@ function getTokenId(data) {
     let topics = data.logs[1].topics;
   
     let parsedData = web3.eth.abi.decodeLog(inputs, hexString, topics);
+    console.info(parsedData)
     let tokenId = parsedData.tokenId;
     return tokenId;
 }
@@ -152,13 +156,17 @@ async function getGasPrice() {
     return gasPrice;
 }
 
-function buildJson(personName, personAlias, imageUrl) {
+function buildJson(personName, personAlias, imageUrl, linkedinprofile) {
     const json = {
         "name": personName,
         "alias": personAlias,
         "image": imageUrl,
         "external_link": "https://www.caramelpoint.com",
         "attributes": [
+            { 
+                "trait_type": "LinkedIn profile", 
+                "value": linkedinprofile
+            }
         ]
     }
     console.info(json);
