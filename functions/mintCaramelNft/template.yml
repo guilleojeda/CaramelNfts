@@ -15,6 +15,8 @@ Transform:
 Parameters:
   InfuraKey:
     Type: String
+  NetworkId:
+    Type: String
   PublicKey:
     Type: String
   ApiKeyValue:
@@ -51,6 +53,7 @@ Resources:
         Variables:
           # Make table name accessible as environment variable from function code during execution
           INFURA_KEY: !Ref InfuraKey
+          NETWORK_ID: !Ref NetworkId
           PUBLIC_KEY: !Ref PublicKey
           PRIVATE_KEY_SECRET_NAME: PrivateKeySecret
           JSONS_BUCKET_NAME: !Ref JsonsBucket
