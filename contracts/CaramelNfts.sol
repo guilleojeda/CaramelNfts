@@ -1,10 +1,14 @@
-// contracts/MyNFT.sol
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+// SPDX-License-Identifier: GPL-3.0
+
+pragma solidity >=0.7.0 <0.9.0;
 
 import "@openzeppelin/contracts/token/ERC721/presets/ERC721PresetMinterPauserAutoId.sol";
 
-contract CaramelNfts is ERC721 {
-    constructor() ERC721("CaramelNfts", "CaramelNfts") {
+contract CaramelNfts is ERC721PresetMinterPauserAutoId {
+
+    constructor() ERC721PresetMinterPauserAutoId("CaramelToken", "CARAMEL", "https://www.caramelpoint.com/nfts/metadata/") {}
+
+    function tokenURI(uint256 tokenId) public view virtual override returns (string memory) {
+       return string(abi.encodePacked(super.tokenURI(tokenId),".json"));
     }
 }

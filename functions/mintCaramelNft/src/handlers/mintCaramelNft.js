@@ -1,11 +1,18 @@
 // Create clients and set shared const values outside of the handler.
 
 //fix authentication for lambda DONE
-//deploy contract to polygon
+//deploy contract to polygon DONE
 //put contract ABI in s3 bucket
-//add permissions to lambda to read secret from secrets manager
-
+//add permissions to lambda to read secret from secrets manager DONE
+//add permissions to lambda to read contract ABI from s3 bucket DONE
 //read contract ABI from s3 bucket and set it to const Asset
+
+const aws = require("aws-sdk");
+const region = process.env.REGION
+const secretsManager = new aws.SecretsManager({
+    region: region
+});
+const s3 = new aws.S3();
 
 const Web3 = require("web3");
 const infuraProjectId = process.env.INFURA_KEY;
@@ -17,14 +24,15 @@ const networks = {
 };
 var networkId = process.env.NETWORK_ID
 let web3 = new Web3(new Web3.providers.HttpProvider(networks[networkId] + infuraProjectId));
-// const deployedNetwork = Asset.networks[networkId];
-// console.info(`deployed contract address: ${deployedNetwork.address}`);
 
 const publicKey = process.env.PUBLIC_KEY;
-const privateKeySecretName = process.env.PRIVATE_KEY_SECRET_NAME
+const privateKeySecretName = process.env.PRIVATE_KEY_SECRET_NAME;
+const jsonsBucketName = process.env.JSONS_BUCKET_NAME;
+const contractAbiBucketName = process.env.CONTRACT_ABI_BUCKET_NAME;
+const contractAddress = process.env.CONTRACT_ADDRESS;
 
 const GASSTATION_API_URL = 'https://gasstation-mainnet.matic.network';
-import fetch from 'node-fetch';
+const axios = require('axios')
 const gasPriceSelection = 'fastest';
 
 /**
@@ -34,45 +42,44 @@ exports.mintCaramelNftHandler = async (event) => {
     if (event.httpMethod !== 'POST') {
         throw new Error(`mintCaramelNft only accepts POST method, you tried: ${event.httpMethod}`);
     }
-    // All log statements are written to CloudWatch
     console.info('received:', event);
+    const body = JSON.parse(event.body);
+    const buyer = body.buyer;
+    console.info('buyer is ', buyer)
 
-    const buyer = event.buyer;
+    const personName = body.name;
+    const personAlias = body.alias;
+    const imageUrl = body.imageUrl;
     
-    //get NFT data from event
-    //build json
-    //save json to S3
-    //get uri from json in s3
+    const json = buildJson(personName, personAlias, imageUrl);
+    const jsonPath = 'jsons/' + personName + '.json';
+    const jsonUri = await uploadToS3(jsonPath, json);
+    console.info('jsonUri is ', jsonUri);
     
-    //get private key from secrets manager
+    const secret = await secretsManager.getSecretValue({ SecretId: privateKeySecretName }).promise()
+    const privateKey = secret.SecretString;
 
-    // const nftFactoryInstance = new web3.eth.Contract(Asset.abi, deployedNetwork && deployedNetwork.address);
-    // let account = web3.eth.accounts.privateKeyToAccount(privateKey);
+    const contractAbi = await getContractAbi();
 
-    let gasPrice = 15;
-    let blockTime;
-    await fetch(GASSTATION_API_URL)
-        .then(response => response.json())
-        .then(json => {
-            gasPrice = (json[gasPriceSelection]).toFixed(4); 
-            blockTime = json["blockTime"];
-        });
-    console.info(`Gas price for ${gasPriceSelection} transaction is ${gasPrice}`);
-    console.info(`Expected duration of the transaction is ${blockTime} seconds`);
+    const nftFactoryInstance = new web3.eth.Contract(contractAbi, contractAddress);
+    let account = web3.eth.accounts.privateKeyToAccount(privateKey);
 
-    // var encoded = await nftFactoryInstance.methods.mint(buyer, uri).encodeABI();
-    // var tx = {
-    //     from: publicKey,
-    //     to : deployedNetwork.address,
-    //     data : encoded,
-    //     gas: await web3.eth.estimateGas({
-    //         from: publicKey,
-    //         to: deployedNetwork.address,
-    //         data: encoded
-    //     }),
-    //     nonce: await web3.eth.getTransactionCount(publicKey, 'pending'),
-    //     maxFeePerGas: web3.utils.toWei("" + gasPrice, 'gwei')
-    // }
+    let gasPrice = await getGasPrice();
+    console.info('gasPrice is ', gasPrice);
+
+    var encoded = await nftFactoryInstance.methods.mint(buyer, uri).encodeABI();
+    var tx = {
+        from: publicKey,
+        to : deployedNetwork.address,
+        data : encoded,
+        gas: await web3.eth.estimateGas({
+            from: publicKey,
+            to: deployedNetwork.address,
+            data: encoded
+        }),
+        nonce: await web3.eth.getTransactionCount(publicKey, 'pending'),
+        maxFeePerGas: web3.utils.toWei("" + gasPrice, 'gwei')
+    }
     // let signed = await web3.eth.accounts.signTransaction(tx, account.privateKey);
     // const data = await sendTransaction(signed.rawTransaction)
     // const tokenId = getTokenId(data);
@@ -85,9 +92,21 @@ exports.mintCaramelNftHandler = async (event) => {
         body: JSON.stringify(infuraProjectId)
     };
 
-    // All log statements are written to CloudWatch
     console.info(`response from: ${event.path} statusCode: ${response.statusCode} body: ${response.body}`);
     return response;
+}
+
+async function uploadToS3(path, json) {
+    let params = {
+        Bucket: jsonsBucketName,
+        Key: path,
+        Body: JSON.stringify(json),
+        ContentType: "application/json",
+        ACL: 'public-read'
+    };
+    const result = await s3.upload(params).promise()
+    const jsonUri = result.Location
+    return jsonUri;
 }
 
 function sendTransaction(transaction) {
@@ -96,7 +115,7 @@ function sendTransaction(transaction) {
         .once('transactionHash', (hash) => { console.info('transaction hash is ', hash) })
         .on('receipt', (data) => {resolve(data)})
         .on('error', (error) => {
-            console.log("Encountered an error");
+            console.info("Encountered an error");
             console.error(error);
         });
     });
@@ -116,4 +135,40 @@ function getTokenId(data) {
     let parsedData = web3.eth.abi.decodeLog(inputs, hexString, topics);
     let tokenId = parsedData.tokenId;
     return tokenId;
+}
+
+async function getGasPrice() {
+    let gasPrice;
+    let blockTime;
+    await axios.get(GASSTATION_API_URL)
+        .then(response => {
+            console.info(response)
+            gasPrice = (response.data[gasPriceSelection]).toFixed(4);
+            blockTime = response.data["blockTime"];
+        });
+    console.info(`Gas price for ${gasPriceSelection} transaction is ${gasPrice}`);
+    console.info(`Expected duration of the transaction is ${blockTime} seconds`);
+}
+
+function buildJson(personName, personAlias, imageUrl) {
+    const json = {
+        "name": personName,
+        "alias": personAlias,
+        "image": imageUrl,
+        "external_link": "https://www.caramelpoint.com",
+        "attributes": [
+        ]
+    }
+    console.info(json);
+    return json;
+}
+
+async function getContractAbi() {
+    const data = await s3.getObject({
+        Bucket: contractAbiBucketName,
+        Key: 'CaramelNfts.json',
+    }).promise()
+    const fileData = data.Body.toString('utf-8');
+    const contractAbi = JSON.parse(fileData);
+    return contractAbi;
 }

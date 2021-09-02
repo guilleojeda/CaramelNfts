@@ -17,9 +17,13 @@ Parameters:
     Type: String
   PublicKey:
     Type: String
-  PrivateKeySecretName:
-    Type: String
   ApiKeyValue:
+    Type: String
+  JsonsBucketName:
+    Type: String
+  ContractAbiBucketName:
+    Type: String
+  ContractAddress:
     Type: String
 
 # Resources declares the AWS resources that you want to include in the stack
@@ -28,7 +32,6 @@ Resources:
   # Each Lambda function is defined by properties:
   # https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
 
-  # This is a Lambda function config associated with the source code: get-all-items.js
   mintCaramelNftFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -38,15 +41,23 @@ Resources:
       Timeout: 900
       Description: A function that receives NFT data and mints an NFT.
       Policies:
-        # Give Create/Read/Update/Delete Permissions to the SampleTable
+        - S3ReadPolicy:
+            BucketName: !Ref ContractAbiBucket
         - S3CrudPolicy:
-            BucketName: caramel-nfts
+            BucketName: !Ref JsonsBucket
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn: !Ref PrivateKeySecret
       Environment:
         Variables:
           # Make table name accessible as environment variable from function code during execution
           INFURA_KEY: !Ref InfuraKey
           PUBLIC_KEY: !Ref PublicKey
-          PRIVATE_KEY_SECRET_NAME: !Ref PrivateKeySecretName
+          PRIVATE_KEY_SECRET_NAME: PrivateKeySecret
+          JSONS_BUCKET_NAME: !Ref JsonsBucket
+          CONTRACT_ABI_BUCKET_NAME: !Ref ContractAbiBucket
+          CONTRACT_ADDRESS: !Ref ContractAddress
+          SECRETS_MANAGER_ENDPOINT: !Sub 'https://secretsmanager.${AWS::Region}.amazonaws.com' 
+          REGION: !Ref AWS::Region
       Events:
         ApiKey:
           Type: Api
@@ -64,11 +75,18 @@ Resources:
       Auth:
         ApiKeyRequired: true # sets for all methods
 
+  PrivateKeySecret:
+    Type: 'AWS::SecretsManager::Secret'
+    Properties:
+      Name: PrivateKeySecret
+      Description: This secret contains the private key for the account that will sign transactions to the contract
+      SecretString: 'ENTER YOUR PRIVATE KEY HERE'
+
   ApiKey: 
     Type: AWS::ApiGateway::ApiKey
     Properties: 
       Name: !Join ["", [{"Ref": "AWS::StackName"}, "-apikey"]]
-      Description: "CloudFormation API Key V1"
+      Description: "Mint Caramel NFTs API Key"
       Enabled: true
       GenerateDistinctId: false
       Value: !Ref ApiKeyValue
@@ -96,6 +114,23 @@ Resources:
       KeyId: !Ref ApiKey
       KeyType: API_KEY
       UsagePlanId: !Ref ApiUsagePlan
+
+  JsonsBucket:
+    Type: 'AWS::S3::Bucket'
+    DeletionPolicy: Retain
+    Properties:
+      BucketName: !Ref JsonsBucketName
+      AccessControl: PublicRead
+      VersioningConfiguration:
+        Status: Enabled
+        
+  ContractAbiBucket:
+    Type: 'AWS::S3::Bucket'
+    DeletionPolicy: Retain
+    Properties:
+      BucketName: !Ref ContractAbiBucketName
+      VersioningConfiguration:
+        Status: Enabled
 
   # Each Lambda function is defined by properties:
   # https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
